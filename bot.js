@@ -1,8 +1,13 @@
 // Load environment variables
 require('dotenv').config();
 
-// Import the Twitch messaging interface
+// Import required modules
 const tmi = require('tmi.js');
+const express = require('express'); // We need this for the web server
+const app = express();
+
+// Set up the web server port
+const PORT = process.env.PORT || 3000; // Render will provide the PORT
 
 // Configuration from environment variables
 const BOT_USERNAME = process.env.TWITCH_BOT_USERNAME;
@@ -12,15 +17,89 @@ const CHANNEL_NAME = process.env.TWITCH_CHANNEL;
 // Store active timers
 const activeTimers = new Map();
 
-// IMPORTANT: Track connection state to prevent duplicates
+// Track connection state to prevent duplicates
 let isConnected = false;
 let connectionAttempts = 0;
+let botStartTime = new Date();
 
-// Create the bot with its configuration
+// Create a simple web page for the bot status
+app.get('/', (req, res) => {
+    const uptime = Math.floor((new Date() - botStartTime) / 1000 / 60); // uptime in minutes
+    const timerCount = activeTimers.size;
+    
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Twitch Timer Bot Status</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    max-width: 600px;
+                    margin: 50px auto;
+                    padding: 20px;
+                    background-color: #f0f0f0;
+                }
+                .status-box {
+                    background-color: white;
+                    padding: 30px;
+                    border-radius: 10px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }
+                .online {
+                    color: #4CAF50;
+                    font-weight: bold;
+                }
+                .offline {
+                    color: #f44336;
+                    font-weight: bold;
+                }
+                h1 {
+                    color: #9146FF; /* Twitch purple */
+                }
+            </style>
+        </head>
+        <body>
+            <div class="status-box">
+                <h1>🤖 Twitch Timer Bot</h1>
+                <p>Status: <span class="${isConnected ? 'online' : 'offline'}">${isConnected ? '✅ Online' : '❌ Offline'}</span></p>
+                <p>Bot Username: ${BOT_USERNAME || 'Not configured'}</p>
+                <p>Channel: ${CHANNEL_NAME || 'Not configured'}</p>
+                <p>Uptime: ${uptime} minutes</p>
+                <p>Active Timers: ${timerCount}</p>
+                <hr>
+                <h3>Available Commands:</h3>
+                <ul>
+                    <li><code>!10min</code> - Start a 10-minute timer</li>
+                    <li><code>!15min2</code> - Start a 15-minute timer with 2-minute updates</li>
+                    <li><code>!stoptimer</code> - Stop your active timers</li>
+                    <li><code>!timers</code> - Check your active timers</li>
+                </ul>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+// Health check endpoint for Render
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        connected: isConnected,
+        uptime: Math.floor((new Date() - botStartTime) / 1000)
+    });
+});
+
+// Start the web server
+app.listen(PORT, () => {
+    console.log(`Web server listening on port ${PORT}`);
+    console.log(`You can view the bot status at http://localhost:${PORT}`);
+});
+
+// Create the Twitch bot client
 const client = new tmi.Client({
     options: { 
         debug: true,
-        // IMPORTANT: Disable automatic reconnection to control it manually
         skipUpdatingEmotesets: true
     },
     connection: {
@@ -64,10 +143,12 @@ async function connectToTwitch() {
     }
 }
 
-// Start the connection
-connectToTwitch();
+// Start the Twitch connection after a short delay
+setTimeout(() => {
+    connectToTwitch();
+}, 2000);
 
-// When successfully connected
+// When successfully connected to Twitch
 client.on('connected', (addr, port) => {
     // Prevent multiple connection handlers
     if (isConnected) {
@@ -79,7 +160,7 @@ client.on('connected', (addr, port) => {
     console.log(`✅ Connected to ${addr}:${port}`);
     console.log(`✅ Joined channel: ${CHANNEL_NAME}`);
     
-    // Only send the welcome message once
+    // Send welcome message after a short delay
     setTimeout(() => {
         if (isConnected) {
             client.say(CHANNEL_NAME, '🤖 Timer bot is online! Use commands like !10min or !15min2')
@@ -100,7 +181,7 @@ client.on('disconnected', (reason) => {
     }, 5000);
 });
 
-// IMPORTANT: Use a message ID tracker to prevent duplicate processing
+// Track processed messages to prevent duplicates
 const processedMessages = new Set();
 
 // Listen for messages in chat
@@ -108,14 +189,14 @@ client.on('message', (channel, tags, message, self) => {
     // Ignore messages from the bot itself
     if (self) return;
     
-    // IMPORTANT: Check if we've already processed this message
+    // Check if we've already processed this message
     const messageId = tags.id;
     if (messageId && processedMessages.has(messageId)) {
         console.log('Duplicate message detected, skipping:', message);
         return;
     }
     
-    // Add to processed messages (keep only last 100 to prevent memory issues)
+    // Add to processed messages (keep only last 100)
     if (messageId) {
         processedMessages.add(messageId);
         if (processedMessages.size > 100) {
@@ -169,7 +250,7 @@ function startTimer(channel, username, minutes, intervalMinutes) {
     // Calculate when the timer should end
     const endTime = Date.now() + (minutes * 60 * 1000);
     
-    // Send confirmation message ONCE
+    // Send confirmation message
     sendMessage(channel, `⏱️ @${username} started a ${minutes}-minute timer! I'll update every ${intervalMinutes} minute(s).`);
     
     // Create the timer object
@@ -179,7 +260,6 @@ function startTimer(channel, username, minutes, intervalMinutes) {
         endTime: endTime,
         intervalMinutes: intervalMinutes,
         lastUpdate: Date.now(),
-        announced: false,  // Track if we've announced this timer
         interval: setInterval(() => {
             const now = Date.now();
             const remaining = endTime - now;
@@ -210,7 +290,7 @@ function startTimer(channel, username, minutes, intervalMinutes) {
                 sendMessage(channel, `⏱️ @${username}: ${timeString} remaining!`);
                 timer.lastUpdate = now;
             }
-        }, 5000)
+        }, 5000) // Check every 5 seconds for accuracy
     };
     
     // Store the timer
@@ -273,7 +353,7 @@ function showTimerStatus(channel, username) {
     }
 }
 
-// Graceful shutdown
+// Graceful shutdown handling
 process.on('SIGTERM', () => {
     console.log('SIGTERM received, cleaning up...');
     
@@ -291,7 +371,8 @@ process.on('SIGTERM', () => {
     process.exit(0);
 });
 
-// Keep the bot running
+// Log startup information
 console.log('Bot is starting up...');
+console.log(`Web server will listen on port: ${PORT}`);
 console.log(`Bot username: ${BOT_USERNAME}`);
 console.log(`Target channel: ${CHANNEL_NAME}`);
