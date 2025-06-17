@@ -1,0 +1,16 @@
+{
+  "name": "twitch-countdown-bot",
+  "version": "1.0.0",
+  "description": "A Twitch bot that manages countdown timers",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "tmi.js": "^1.8.5",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
