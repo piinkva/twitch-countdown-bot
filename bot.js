@@ -1,8 +1,9 @@
 // Load environment variables
-require('dotenv').config();
+if (process.env.NODE_ENV !== 'production') {
+    require('dotenv').config();
+}
 
 // Import required modules
-const tmi = require('tmi.js');
 const express = require('express');
 const app = express();
 
@@ -13,6 +14,7 @@ const PORT = process.env.PORT || 3000;
 const BOT_USERNAME = process.env.TWITCH_BOT_USERNAME;
 const OAUTH_TOKEN = process.env.TWITCH_OAUTH_TOKEN;
 const CHANNEL_NAME = process.env.TWITCH_CHANNEL;
+const ALLOW_MODS_AND_BROADCASTER = true;
 
 // Permission configuration - you can customize this!
 // Option 1: List specific usernames who can use the bot (leave empty to disable)
