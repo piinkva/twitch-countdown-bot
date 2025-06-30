@@ -6,6 +6,7 @@ if (process.env.NODE_ENV !== 'production') {
 // Import required modules
 const express = require('express');
 const app = express();
+const tmi = require('tmi.js');
 
 // Set up the web server port
 const PORT = process.env.PORT || 3000;
