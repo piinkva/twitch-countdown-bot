@@ -1,5 +1,5 @@
 app = "twitch-countdown-bot"
-primary_region = "iad"
+primary_region = "ams"
 
 [http_service]
   internal_port = 8080
